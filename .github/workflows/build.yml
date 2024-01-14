@@ -1,0 +1,109 @@
+name: Build image
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Allow all permissions on the repository
+permissions:
+  contents: read
+  packages: write
+  actions: read
+  security-events: write
+
+jobs:
+  build:
+    name: Build image
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the code
+      - name: Code checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      # Build the image and push it to the container registry
+      - name: Build image and push to container registry
+        id: docker_build
+        uses: docker/build-push-action@v4
+        with:
+          context: ./
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm/v7
+          tags: |
+            ${{ vars.REGISTRY_IMAGE }}:${{ github.sha }}
+          push: true
+
+      # Output the image digest
+      - name: Image digest
+        run: echo ${{ steps.docker_build.outputs.digest }}
+          
+  scan:
+    name: Snyk scan
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the code
+      - name: Code checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Pull image
+        run: docker pull ${{ vars.REGISTRY_IMAGE }}:${{ github.sha }}
+          
+      - name: Scan Docker image
+        uses: snyk/actions/docker@master
+        continue-on-error: true
+        with:
+          image: ${{ vars.REGISTRY_IMAGE }}:${{ github.sha }}
+          args: --file=Dockerfile --severity-threshold=high --sarif-file-output=snyk.sarif
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+  promote:
+    name: Promote image
+    needs: scan
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the code
+      - name: Code checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tag the image
+      - name: Tag image
+        run: docker tag ${{ vars.REGISTRY_IMAGE }}:${{ github.sha }} ${{ vars.REGISTRY_IMAGE }}:latest
+
+      # Push the image
+      - name: Push image
+        run: docker push ${{ vars.REGISTRY_IMAGE }}:latest
+
+      # Output the image digest
+      - name: Image digest
+        run: echo ${{ steps.docker_build.outputs.digest }}
+  
