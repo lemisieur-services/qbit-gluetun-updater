@@ -97,7 +97,9 @@ jobs:
 
       # Tag the image
       - name: Tag image
-        run: docker tag ${{ vars.REGISTRY_IMAGE }}:${{ github.sha }} ${{ vars.REGISTRY_IMAGE }}:latest
+        run: | 
+          docker pull ${{ vars.REGISTRY_IMAGE }}:${{ github.sha }}
+          docker tag ${{ vars.REGISTRY_IMAGE }}:${{ github.sha }} ${{ vars.REGISTRY_IMAGE }}:latest
 
       # Push the image
       - name: Push image
