@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.8-slim-buster
+FROM python:3.11-slim-buster
 
 # Use environment variable for cron schedule
 ENV QBIT_HOST= \
